@@ -1,28 +1,47 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
-from typing import List
+from fastapi import FastAPI , Depends
+from sqlalchemy import Column , Integer, String
+from sqlalchemy.orm import Session
+from database import Base, engine , SessionLocal
 
-#1 . fastapi의 기능을 app이라는 이름으로 가져와서 쓰겠다고 선언
 app = FastAPI()
 
-#. 우리가 다룰 트렌드 데이터의 절대적인 틀(Schema)를 정의함
-class TrendItem(BaseModel):
-    title : str  # 제목은 반드시 스트링이어야한다
-    category : str # 카테고리도 스트링
-    rank : int # 순위는 정수형
+# . DB 설계도 - postgresql에 꽂아 넣을 테이블 구조 선언
+class DBTrendItem(Base) :
+    __tablename__ = "trends"
 
-#2. 사용자가 기본주소 '/'로 들어오면 환영 인사를 건네라
-@app.get("/")
-def read_root():
-    return {"message" : "시장 트렌드 수집 api 서버에 오신 것을 한영합니다 ! "}
+    id = Column(Integer , primary_key = True , index = True)
+    title = Column(String , index = True)
+    category = Column(String)
+    rank = Column(Integer)
 
-#. 위에서 정의한 틀(TrendItem)의 규칙을 따르는 데이터만 내보내겠다고 선언
-@app.get("/trends/today" , response_model = List[TrendItem])
-def get_today_trends():
-    return[
-        {"title" : "엔비디아 주가 폭등" , "category" : "주식" , "rank" : 1},
-        {"title" : "삼성전자 신제품 출시" , "category" : "IT" , "rank" : 2},
-    ]
+#서버가 켜질 때 위에서 정의한 설계도를 바탕으로 DB에 진짜 테이블을 만들기
+Base.metadata.create_all(bind=engine)
 
-# @app.get()부분은 일종의 이정표 역할을 함 사용자가 이 주소로 데이터 주라고 요청(GET)하면 바로 밑에 있는 함수를 실행해서 중괄호 안에 ㅣㅇㅆ는 데이터를 반환하라는 의미
+def get_db():
+    db = SessionLocal()
+    try :
+        yield db
+    finally :
+        db.close()
 
+@app.post("/trends/db")
+def create_trend_in_db(title : str , category : str , rank : int , db : Session = Depends(get_db)) :
+    # db에 넣을 객체 만들기
+    new_trend = DBTrendItem(title = title , category = category , rank = rank)
+
+    db.add(new_trend)
+
+    db.commit()
+
+    db.refresh(new_trend)
+    return {"message" : "DB 저장 성공" , "data" : {"id" : new_trend.id , "title" : new_trend.title}}
+
+@app.get("/trends/db/all")
+def get_all_trends_from_db(db : Session = Depends(get_db)):
+    trends_in_db = db.query(DBTrendItem).all()
+
+    return{
+        "source" : "진짜 postgresql 데이터베이스",
+        "total_count" : len(trends_in_db),
+        "trends" : trends_in_db,
+    }
