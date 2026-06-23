@@ -2,8 +2,17 @@ from fastapi import FastAPI , Depends
 from sqlalchemy import Column , Integer, String
 from sqlalchemy.orm import Session
 from database import Base, engine , SessionLocal
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins = ["http://localhost:5173"],
+    allow_credentials = True ,
+    allow_methods = ['*'],
+    allow_headers = ['*'],
+)
 
 # . DB 설계도 - postgresql에 꽂아 넣을 테이블 구조 선언
 class DBTrendItem(Base) :
